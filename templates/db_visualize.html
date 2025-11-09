@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>数据库可视化</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif; margin: 0; padding: 0; background: #f8fafc; color: #0f172a; }
+    header { padding: 16px 24px; background: #ffffff; border-bottom: 1px solid #e5e7eb; display: flex; align-items: center; justify-content: space-between; }
+    header h1 { font-size: 18px; margin: 0; }
+    main { max-width: 1100px; margin: 0 auto; padding: 24px; }
+    a { color: #16a34a; text-decoration: none; }
+    .card { background: #ffffff; border: 1px solid #e5e7eb; border-radius: 12px; padding: 16px; margin-bottom: 16px; }
+    .row { display: flex; gap: 16px; flex-wrap: wrap; }
+    .col { flex: 1 1 360px; }
+    label { display: block; font-size: 12px; color: #475569; margin-bottom: 6px; }
+    input[type="text"] { width: 100%; padding: 10px 12px; border-radius: 10px; border: 1px solid #cbd5e1; background: #ffffff; color: #0f172a; box-sizing: border-box; }
+    table { width: 100%; border-collapse: collapse; font-size: 14px; }
+    th, td { padding: 8px 10px; border-bottom: 1px solid #e5e7eb; }
+    th { color: #64748b; text-align: left; }
+    .muted { color: #64748b; font-size: 12px; }
+  </style>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+</head>
+<body>
+  <header>
+    <h1>数据库可视化</h1>
+    <nav>
+      <a href="{{ url_for('upload_file') }}">返回首页 ➜</a>
+    </nav>
+  </header>
+  <main>
+    <div class="card">
+      <div class="row">
+        <div class="col">
+          <label for="q">搜索（文件名 / 模型）</label>
+          <input id="q" type="text" placeholder="输入关键词过滤历史记录" />
+        </div>
+        <div class="col" style="flex:0 0 180px;">
+          <label>&nbsp;</label>
+          <button id="refresh" onclick="loadData();">刷新</button>
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      <h3 style="margin-top:0;">统计</h3>
+      <canvas id="chart" style="max-height:300px;"></canvas>
+    </div>
+    <div class="card">
+      <h3 style="margin-top:0;">历史记录</h3>
+      <div id="tablewrap" style="overflow:auto; max-height:480px;"></div>
+    </div>
+  </main>
+  <script>
+    let rawData = [];
+    const qEl = document.getElementById('q');
+    qEl && qEl.addEventListener('input', () => renderTable(filterData()));
+    async function loadData(){
+      try{
+        const r = await fetch('/api/db_rows');
+        const j = await r.json();
+        if (!j.ok) {
+          document.getElementById('tablewrap').innerText = '无法获取数据';
+          return;
+        }
+        rawData = j.rows || [];
+        renderTable(rawData);
+        renderChart(rawData);
+      }catch(e){
+        document.getElementById('tablewrap').innerText = '请求失败: '+e;
+      }
+    }
+    function filterData(){
+      const q = (qEl.value || '').toLowerCase().trim();
+      if (!q) return rawData;
+      return rawData.filter(it => (it.filename||'').toLowerCase().includes(q) || (it.model_label||'').toLowerCase().includes(q));
+    }
+    function renderTable(rows){
+      const wrap = document.getElementById('tablewrap');
+      if (!rows || rows.length === 0){
+        wrap.innerHTML = '<p class="muted">暂无记录</p>';
+        return;
+      }
+      const tbl = document.createElement('table');
+      const thead = document.createElement('thead');
+      thead.innerHTML = '<tr><th>时间</th><th>模型</th><th>原图</th><th>结果</th></tr>';
+      tbl.appendChild(thead);
+      const tbody = document.createElement('tbody');
+      rows.slice().reverse().forEach(it => {
+        const tr = document.createElement('tr');
+        const a1 = `<a href="/uploads/${encodeURIComponent(it.filename)}" target="_blank">${it.filename||''}</a>`;
+        const a2 = `<a href="/uploads/${encodeURIComponent(it.result_filename||'')}" target="_blank">${it.result_filename||''}</a>`;
+        tr.innerHTML = `<td class="muted">${it.time||''}</td><td>${it.model_label||''}</td><td>${a1}</td><td>${a2}</td>`;
+        tbody.appendChild(tr);
+      });
+      tbl.appendChild(tbody);
+      wrap.innerHTML = '';
+      wrap.appendChild(tbl);
+    }
+
+    let chartInstance = null;
+    function renderChart(rows){
+      const ctx = document.getElementById('chart').getContext('2d');
+      const counts = {};
+      rows.forEach(it => {
+        const labs = it.labels || [];
+        if (!Array.isArray(labs)) return; 
+        labs.forEach(l => {
+          const k = (l||'unknown').toString();
+          counts[k] = (counts[k]||0) + 1;
+        });
+      });
+      const labels = Object.keys(counts).sort((a,b)=>counts[b]-counts[a]);
+      const data = labels.map(l => counts[l]);
+      if (chartInstance) chartInstance.destroy();
+      chartInstance = new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels: labels,
+          datasets: [{ label: '检测到的次数', data: data, backgroundColor: labels.map((_,i)=> i%2==0? '#16a34a':'#34d399') }]
+        },
+        options: { responsive: true, maintainAspectRatio: false, plugins:{legend:{display:false}} }
+      });
+    }
+    loadData();
+  </script>
+</body>
+</html>

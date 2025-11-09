@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>日志查看</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif; margin: 0; padding: 0; background: #f8fafc; color: #0f172a; }
+    header { padding: 16px 24px; background: #ffffff; border-bottom: 1px solid #e5e7eb; display: flex; align-items: center; justify-content: space-between; }
+    header h1 { font-size: 18px; margin: 0; }
+    main { max-width: 1100px; margin: 0 auto; padding: 24px; }
+    a { color: #16a34a; text-decoration: none; }
+    a:hover { text-decoration: underline; color: #15803d; }
+    .card { background: #ffffff; border: 1px solid #e5e7eb; border-radius: 12px; padding: 16px; margin-bottom: 16px; }
+    .row { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
+    label { display: block; font-size: 12px; color: #475569; margin-bottom: 6px; }
+    select, input[type="number"], input[type="checkbox"], button { width: 100%; padding: 10px 12px; border-radius: 10px; border: 1px solid #cbd5e1; background: #ffffff; color: #0f172a; box-sizing: border-box; }
+    input[type="checkbox"] { width: auto; }
+    button { cursor: pointer; background: #16a34a; border: none; color: #ffffff; }
+    button:hover { background: #15803d; }
+    .muted { color: #64748b; font-size: 12px; }
+    pre { margin: 0; white-space: pre-wrap; word-break: break-word; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace; font-size: 12px; line-height: 1.4; }
+    .logbox { background: #0b1220; color: #e2e8f0; border-radius: 12px; padding: 12px; max-height: 520px; overflow: auto; border: 1px solid #111827; }
+    .actions { display: flex; gap: 8px; align-items: center; }
+    .tabs { display:flex; gap:8px; }
+    .tab { padding: 8px 12px; border-radius: 999px; border: 1px solid #cbd5e1; cursor: pointer; user-select: none; }
+    .tab.active { background:#16a34a; color:#fff; border-color:#16a34a; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>日志查看</h1>
+    <nav>
+      <a href="{{ url_for('upload_file') }}">图片识别</a>
+      &nbsp;|&nbsp;
+      <a href="{{ url_for('camera_page') }}">摄像头实时识别</a>
+    </nav>
+  </header>
+  <main>
+    <div class="card">
+      <div class="actions" style="justify-content: space-between;">
+        <div class="tabs" role="tablist">
+          <div id="tab-app" class="tab active" data-type="app" role="tab" aria-selected="true">应用日志 (app.log)</div>
+        </div>
+      </div>
+      <div class="row" style="margin-top:12px;">
+        <div>
+          <label for="tail">尾部行数</label>
+          <input id="tail" type="number" min="50" step="50" value="{{ defaults.tail }}" />
+        </div>
+        <div>
+          <label for="autorefresh">自动刷新</label>
+          <div style="display:flex;align-items:center;gap:8px;">
+            <input id="autorefresh" type="checkbox" checked />
+            <span class="muted">每 1.2s</span>
+          </div>
+        </div>
+        <div>
+          <label>&nbsp;</label>
+          <button id="btn-refresh" type="button">刷新</button>
+        </div>
+      </div>
+      <div class="logbox" id="logbox"><pre id="logs">日志加载中…</pre></div>
+    </div>
+  </main>
+  <script>
+    const el = (id) => document.getElementById(id);
+    const tailInput = el('tail');
+    const autoCb = el('autorefresh');
+    const refreshBtn = el('btn-refresh');
+    const tabApp = el('tab-app');
+    const logsPre = el('logs');
+    const logbox = el('logbox');
+    const metaEl = el('meta');
+    let current = 'app'; 
+    let timer = null;
+    function setTab(type) {
+      current = type;
+      tabApp.classList.toggle('active', type === 'app');
+      tabApp.setAttribute('aria-selected', type === 'app');
+      fetchOnce();
+    }
+    async function fetchAppLogs() {
+      const tail = parseInt(tailInput.value || '400', 10);
+      const res = await fetch(`{{ url_for('api_app_logs') }}?tail=${tail}`);
+      const data = await res.json();
+      if (data.ok) {
+        const text = (data.lines || []).join('\n');
+        const atBottom = Math.abs(logbox.scrollTop + logbox.clientHeight - logbox.scrollHeight) < 8;
+        logsPre.textContent = text || '暂无日志';
+        metaEl.textContent = data.file && data.file.exists ? `文件: ${data.file.path}  大小: ${data.file.size || '-'}  修改时间: ${data.file.mtime || '-'}` : 'app.log 不存在';
+        if (atBottom) logbox.scrollTop = logbox.scrollHeight;
+      }
+    }
+    async function fetchOnce() {
+      // 目前仅支持应用日志（app.log）显示，训练日志页面/接口已被移除
+      return fetchAppLogs();
+    }
+    function begin() {
+      if (timer) clearInterval(timer);
+      const run = () => { fetchOnce().catch(console.error); };
+      run();
+      if (autoCb.checked) timer = setInterval(run, 1200);
+    }
+    refreshBtn.addEventListener('click', () => fetchOnce());
+    autoCb.addEventListener('change', () => begin());
+    tabApp.addEventListener('click', () => setTab('app'));
+    begin();
+  </script>
+</body>
+</html>

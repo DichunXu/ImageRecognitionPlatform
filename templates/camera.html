@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>图像识别平台</title>
+  <style>
+    header { padding: 16px 24px; background: #ffffff; border-bottom: 1px solid #e5e7eb; display: flex; align-items: center; justify-content: space-between; }
+    header h1 { font-size: 18px; margin: 0; }
+    main { max-width: 1100px; margin: 0 auto; padding: 24px; }
+    a { color: #16a34a; text-decoration: none; }
+    a:hover { text-decoration: underline; color: #15803d; }
+    .card { background: #ffffff; border: 1px solid #e5e7eb; border-radius: 12px; padding: 16px; margin-bottom: 16px; }
+  .row { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
+    label { display: block; font-size: 12px; color: #475569; margin-bottom: 6px; }
+    select, input[type="number"], button { width: 100%; padding: 10px 12px; border-radius: 10px; border: 1px solid #cbd5e1; background: #ffffff; color: #0f172a; box-sizing: border-box; }
+    button { cursor: pointer; background: #16a34a; border: none; color: #ffffff; }
+    button:hover { background: #15803d; }
+    .video { background: #ffffff; border: 1px solid #e5e7eb; border-radius: 12px; padding: 8px; }
+    .video img { width: 100%; height: auto; display: block; border-radius: 8px; background: #ffffff; }
+    .note { font-size: 12px; color: #64748b; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>图像识别平台</h1>
+    <nav>
+      <a href="{{ url_for('upload_file') }}">← 返回图片识别</a>
+      &nbsp;|&nbsp;
+      <a href="{{ url_for('logs_page') }}">查看日志 ➜</a>
+    </nav>
+  </header>
+  <main>
+    <div class="card">
+      <div class="row">
+        <div>
+          <label for="model_path">选择模型</label>
+          <select id="model_path">
+            {% for m in models %}
+              <option value="{{ m.path }}" {% if selected_model and m.path == selected_model %}selected{% endif %}>{{ m.label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div>
+          <label for="device">摄像头设备</label>
+          <select id="device">
+            {% if available_cameras %}
+              {% for d in available_cameras %}
+              <option value="{{ d }}" {% if device|string == d|string %}selected{% endif %}>索引 {{ d }}</option>
+              {% endfor %}
+            {% else %}
+              <option value="0" {% if device|string == '0' %}selected{% endif %}>索引 0</option>
+            {% endif %}
+          </select>
+          <p class="note">如果列表为空，可以先尝试索引 0</p>
+        </div>
+        <div>
+          <label for="predict_device">识别设备</label>
+          <select id="predict_device">
+            <option value="auto">auto</option>
+            <option value="cpu">cpu</option>
+            <option value="mps">mps (Apple)</option>
+            <option value="cuda">cuda</option>
+            <option value="cuda:0">cuda:0</option>
+          </select>
+          <p class="note">选择用于 ONNXRuntime 识别的执行提供器</p>
+        </div>
+        <div>
+          <label for="fps">显示帧率 (1-60)</label>
+          <input type="number" id="fps" min="1" max="60" step="1" value="30" />
+        </div>
+        <div>
+          <label for="infer_every">识别间隔帧 (1-60)</label>
+          <input type="number" id="infer_every" min="1" max="60" step="1" value="1" />
+        </div>
+        <div>
+          <label for="conf">置信度阈值 (0-1)</label>
+          <input type="number" id="conf" min="0" max="1" step="0.01" value="{{ conf or 0.6 }}" />
+        </div>
+      </div>
+      <div style="margin-top:12px; display:flex; gap:8px;">
+        <button id="start">开始</button>
+        <button id="stop" style="background:#6b7280;">停止</button>
+      </div>
+    </div>
+    <div class="card video">
+      <img id="stream" alt="Video Stream" />
+    </div>
+  </main>
+  <script>
+    const modelSel = document.getElementById('model_path');
+    const deviceSel = document.getElementById('device');
+    const fpsInput = document.getElementById('fps');
+    const inferInput = document.getElementById('infer_every');
+  const img = document.getElementById('stream');
+    const startBtn = document.getElementById('start');
+    const stopBtn = document.getElementById('stop');
+  const confInput = document.getElementById('conf');
+    function buildURL() {
+      const params = new URLSearchParams({
+        model_path: modelSel.value,
+        device: deviceSel.value,
+        predict_device: document.getElementById('predict_device') ? document.getElementById('predict_device').value : 'auto',
+        fps: String(Math.min(60, Math.max(1, parseInt(fpsInput.value || '30', 10)))) ,
+        infer_every: String(Math.min(60, Math.max(1, parseInt(inferInput.value || '1', 10)))),
+        conf: String(Math.min(1, Math.max(0, parseFloat(confInput.value || '0.6'))))
+      });
+      return `{{ url_for('video_feed') }}?${params.toString()}`;
+    }
+    function start() {
+      img.src = buildURL();
+    }
+    function stop() {
+      img.src = '';
+    }
+    modelSel.addEventListener('change', start);
+    deviceSel.addEventListener('change', start);
+    fpsInput.addEventListener('change', start);
+  inferInput.addEventListener('change', start);
+  confInput.addEventListener('change', start);
+    startBtn.addEventListener('click', (e) => { e.preventDefault(); start(); });
+    stopBtn.addEventListener('click', (e) => { e.preventDefault(); stop(); });
+    start();
+  </script>
+</body>
+</html>

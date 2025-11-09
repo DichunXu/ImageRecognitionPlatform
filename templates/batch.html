@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>批量识别</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif; margin: 0; padding: 0; background: #f8fafc; color: #16a34a; }
+    header { padding: 16px 24px; background: #ffffff; border-bottom: 1px solid #e5e7eb; display: flex; align-items: center; justify-content: space-between; }
+    main { max-width: 900px; margin: 0 auto; padding: 24px; }
+    .card { background: #ffffff; border: 1px solid #e5e7eb; border-radius: 12px; padding: 16px; margin-bottom: 16px; }
+    label { display:block; font-size:12px; color:#475569; margin-bottom:6px; }
+    input, select, button { width:100%; padding:10px 12px; border-radius:10px; border:1px solid #cbd5e1; }
+    button { background:#16a34a; color:#fff; border:none; cursor:pointer; }
+  </style>
+  <script>
+    async function runBatch(){
+      const folder = document.getElementById('folder').value.trim();
+      const model = document.getElementById('model').value;
+      const conf = parseFloat(document.getElementById('conf').value) || 0.6;
+      if (!folder){ alert('请输入要处理的目录（相对于 Code/ 或绝对路径）'); return; }
+      document.getElementById('status').innerText = '正在开始批量识别...';
+      try{
+        const resp = await fetch('/api/batch_infer', {
+          method:'POST', headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({ folder, model, conf })
+        });
+        const j = await resp.json();
+        if (!j.ok){ document.getElementById('status').innerText = '错误: '+(j.error||'未知'); return; }
+        document.getElementById('status').innerText = `完成：处理 ${j.processed} 张图片，生成 ${Object.keys(j.counts||{}).length} 类别统计`;
+        document.getElementById('result').innerText = JSON.stringify(j.counts || {}, null, 2);
+      }catch(e){ document.getElementById('status').innerText = '请求失败: '+e }
+    }
+  </script>
+</head>
+<body>
+  <header>
+    <h1>批量识别</h1>
+    <nav>
+      <a href="{{ url_for('upload_file') }}">返回首页 ➜</a>
+    </nav>
+  </header>
+  <main>
+    <div class="card">
+      <label for="folder">图片目录（相对于项目 `Code` 或绝对路径）</label>
+      <input id="folder" type="text" placeholder="例如: uploads/batch_images 或 /data/images" />
+      <label for="model">选择模型路径（可选）</label>
+      <select id="model">
+        {% for m in models %}
+          <option value="{{ m.path }}">{{ m.label }}</option>
+        {% endfor %}
+      </select>
+      <label for="conf">置信度阈值</label>
+      <input id="conf" type="number" step="0.01" min="0" max="1" value="0.6" />
+      <div style="margin-top:12px;"><button onclick="runBatch()">开始批量识别</button></div>
+    </div>
+    <div class="card">
+      <h3>状态</h3>
+      <div id="status" class="muted">未开始</div>
+      <pre id="result" style="white-space:pre-wrap;word-break:break-word;margin-top:8px;"></pre>
+    </div>
+  </main>
+</body>
+</html>

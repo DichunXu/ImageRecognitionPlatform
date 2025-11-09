@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>图像识别平台</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif; margin: 0; padding: 0; background: #f8fafc; color: #0f172a; }
+    header { padding: 16px 24px; background: #ffffff; border-bottom: 1px solid #e5e7eb; display: flex; align-items: center; justify-content: space-between; }
+    header h1 { font-size: 18px; margin: 0; }
+    main { max-width: 1100px; margin: 0 auto; padding: 24px; }
+    a { color: #16a34a; text-decoration: none; }
+    a:hover { text-decoration: underline; color: #15803d; }
+    .card { background: #ffffff; border: 1px solid #e5e7eb; border-radius: 12px; padding: 16px; margin-bottom: 16px; }
+    .row { display: flex; gap: 16px; flex-wrap: wrap; }
+    .col { flex: 1 1 360px; }
+    label { display: block; font-size: 12px; color: #475569; margin-bottom: 6px; }
+    select, input[type="file"], input[type="number"], button { width: 100%; padding: 10px 12px; border-radius: 10px; border: 1px solid #cbd5e1; background: #ffffff; color: #0f172a; box-sizing: border-box; }
+    button { cursor: pointer; background: #16a34a; border: none; color: #ffffff; }
+    button:hover { background: #15803d; }
+    .muted { color: #64748b; font-size: 12px; }
+    .images { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px; }
+    .imgwrap { background: #ffffff; border: 1px solid #e5e7eb; border-radius: 12px; padding: 8px; }
+    .imgwrap img { width: 100%; height: auto; display: block; border-radius: 8px; }
+    table { width: 100%; border-collapse: collapse; font-size: 14px; }
+    th, td { padding: 8px 10px; border-bottom: 1px solid #e5e7eb; }
+    th { color: #64748b; text-align: left; }
+    .actions { display: flex; gap: 8px; align-items: center; }
+    .note { font-size: 12px; color: #64748b; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>图像识别平台</h1>
+    <nav>
+      <a href="{{ url_for('camera_page') }}">摄像头实时识别 ➜</a>
+      &nbsp;|&nbsp;
+      <a href="{{ url_for('db_page') }}">数据库可视化 ➜</a>
+      &nbsp;|&nbsp;
+  <a href="{{ url_for('batch_page') }}">批量识别 ➜</a>
+  &nbsp;|&nbsp;
+      <a href="{{ url_for('logs_page') }}">查看日志 ➜</a>
+    </nav>
+  </header>
+  <main>
+    <div class="card">
+      <form method="post" enctype="multipart/form-data">
+        <div class="row">
+          <div class="col">
+            <label for="model_path">选择模型</label>
+            <select id="model_path" name="model_path" required>
+              {% for m in models %}
+                <option value="{{ m.path }}" {% if selected_model and m.path == selected_model %}selected{% endif %}>{{ m.label }}</option>
+              {% endfor %}
+            </select>
+            <p class="note">模型文件来自 Code/models 或其子目录。</p>
+          </div>
+          <div class="col">
+            <label for="file">上传图片 (png/jpg/jpeg/bmp)</label>
+            <input id="file" type="file" name="file" accept="image/*" required />
+          </div>
+          <div class="col">
+            <label for="conf">置信度阈值 (0-1)</label>
+            <input id="conf" type="number" name="conf" min="0" max="1" step="0.01" value="{{ conf or 0.6 }}" />
+            <p class="note">默认 0.6，可根据图像与模型调整</p>
+          </div>
+          <div class="col">
+            <label for="predict_device">识别设备</label>
+            <select id="predict_device" name="predict_device">
+              <option value="auto">auto</option>
+            </select>
+            <p class="note">选择用于 ONNXRuntime 识别的执行提供器（通过 auto 自动选择可用的设备）</p>
+          </div>
+          <div class="col" style="flex: 0 0 140px;">
+            <label for="use_cache">使用缓存</label>
+            <div style="display:flex;align-items:center;gap:8px;">
+              <input id="use_cache" name="use_cache" type="checkbox" value="1" checked />
+              <label for="use_cache" class="muted" style="margin:0">启用 Redis 缓存（若已配置）</label>
+            </div>
+          </div>
+        </div>
+        <div style="margin-top:12px;">
+          <button type="submit">开始识别</button>
+        </div>
+      </form>
+    </div>
+    {% if filename or result_img %}
+    <div class="card">
+      <h3 style="margin-top:0;">结果</h3>
+      <div class="images">
+        {% if filename %}
+        <div class="imgwrap">
+          <div class="muted">原图：{{ filename }}</div>
+          <img src="{{ url_for('uploaded_file', filename=filename) }}" alt="原图" />
+        </div>
+        {% endif %}
+        {% if result_img %}
+        <div class="imgwrap">
+          <div class="muted">检测结果：{{ result_img }}</div>
+          <img src="{{ url_for('uploaded_file', filename=result_img) }}" alt="检测结果" />
+        </div>
+        {% endif %}
+      </div>
+    </div>
+    {% endif %}
+    <div class="card">
+      <div class="actions" style="justify-content: space-between;">
+        <h3 style="margin: 0;">历史记录</h3>
+        <form method="post" action="{{ url_for('clear_history') }}" onsubmit="return confirm('确定清空历史记录吗？');">
+          <button type="submit" style="background:#ef4444;">清空历史</button>
+        </form>
+      </div>
+      {% if history and history|length > 0 %}
+      <div style="overflow:auto;">
+        <table>
+          <thead>
+            <tr>
+              <th>时间</th>
+              <th>模型</th>
+              <th>原图</th>
+              <th>结果</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for item in history|reverse %}
+            <tr>
+              <td class="muted">{{ item.time }}</td>
+              <td>{{ item.model_label }}</td>
+              <td><a href="{{ url_for('uploaded_file', filename=item.filename) }}" target="_blank">{{ item.filename }}</a></td>
+              <td><a href="{{ url_for('uploaded_file', filename=item.result_filename) }}" target="_blank">{{ item.result_filename }}</a></td>
+              <td style="width:110px;">
+                <form method="post" action="{{ url_for('delete_history_item') }}" onsubmit="return confirm('确定删除该历史记录吗？');">
+                  {% if item.id %}
+                    <input type="hidden" name="id" value="{{ item.id }}" />
+                  {% else %}
+                    <input type="hidden" name="filename" value="{{ item.filename }}" />
+                  {% endif %}
+                  <button type="submit" style="background:#ef4444;">删除</button>
+                </form>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+        <p class="muted">暂无历史记录</p>
+      {% endif %}
+    </div>
+  </main>
+  <script>
+    (async function(){
+      try{
+        const r = await fetch('/api/onnx/providers');
+        const j = await r.json();
+        const sel = document.getElementById('predict_device');
+        if (j && j.providers && Array.isArray(j.providers)){
+          j.providers.forEach(p => {
+            const opt = document.createElement('option');
+            opt.value = p.toLowerCase();
+            opt.text = p;
+            sel.appendChild(opt);
+          })
+        }
+      }catch(e){ console.debug('获取 providers 失败', e); }
+    })();
+  </script>
+</body>
+</html>
